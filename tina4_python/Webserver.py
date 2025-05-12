@@ -332,7 +332,7 @@ class Webserver:
                         cookie_list[cookie[0].strip()] = cookie[1].strip()
 
                 self.cookies = cookie_list
-                print(self.cookies)
+                Debug.info(f"Cookies: {json.dumps(self.cookies)}")
                 
                 # initialize the session
                 self.session = Session(os.getenv("TINA4_SESSION", "PY_SESS"),
@@ -341,10 +341,10 @@ class Webserver:
                                        )
 
                 if os.getenv("TINA4_SESSION", "PY_SESS") in self.cookies:
-                    print("Session exists")
+                    Debug.info("Session already exists")
                     self.session.load(self.cookies[os.getenv("TINA4_SESSION", "PY_SESS")])
                 else:
-                    print("Starting new session")
+                    Debug.info("Starting new session")
                     self.cookies[os.getenv("TINA4_SESSION", "PY_SESS")] = self.session.start()
 
                 if "sec-websocket-key" not in self.lowercase_headers:
