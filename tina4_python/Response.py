@@ -6,55 +6,79 @@
 # flake8: noqa: E501
 import json
 import inspect
+from datetime import datetime, date
 from types import ModuleType
 from tina4_python import Constant
 from tina4_python import DatabaseResult
-from tina4_python.Debug import Debug
+from tina4_python.ORM import ORM
+
+headers = {}
+content = ""
+http_code = Constant.HTTP_OK
+content_type = Constant.TEXT_HTML
 
 
 class Response:
-    """
-    response object for router
-    :param content
-    :param http_code
-    :param content_type
-    :param headers
-    """
 
-    def __init__(self, content, http_code=Constant.HTTP_OK, content_type=Constant.TEXT_HTML, headers=None):
-        if headers is None:
-            headers = {}
+    @staticmethod
+    def convert_special_types(obj):
+        if isinstance(obj, dict):
+            return {k: Response.convert_special_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [Response.convert_special_types(i) for i in obj]
+        elif isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        else:
+            return obj
 
-        if content is None:
-            content = ""
-        # try to make content into a dictionary
-        elif not isinstance(content, bool) and not isinstance(content, object) and not isinstance(content, bytes) and not isinstance(content, str) and not isinstance(content, list) and inspect.isclass(type(content)):
-            content = dict(content)
+    def __init__(self, content_in=None, http_code_in=None, content_type_in=None,
+                 headers_in=None):
+        global headers
+        global content
+        global http_code
+        global content_type
+
+        if (not isinstance(content_in, bool) and not isinstance(content_in, object)
+                and not isinstance(content_in, bytes)
+                and not isinstance(content_in, str)
+                and not isinstance(content_in, list) and inspect.isclass(type(content_in))):
+            content_in = dict(content_in)
+
+        if isinstance(content_in, ORM):
+            content_type = Constant.APPLICATION_JSON
+            content_in = content_in.to_json()
 
         # check if database result
-        if type(content) is DatabaseResult.DatabaseResult:
+        if type(content_in) is DatabaseResult.DatabaseResult:
             content_type = Constant.APPLICATION_JSON
-            content = content.to_json()
+            content_in = content_in.to_json()
 
         # convert the dictionary or list into JSON
-        if not isinstance(content, bool) and type(content) is dict or type(content) is list:
-            content = json.dumps(content)
+        if not isinstance(content_in, bool) and type(content_in) is dict or type(content_in) is list:
+            content_in = json.dumps(Response.convert_special_types(content_in))
             content_type = Constant.APPLICATION_JSON
 
-        if isinstance(content, bool):
-            if content:
-                content = "True"
+        if isinstance(content_in, bool):
+            if content_in:
+                content_in = "True"
             else:
-                content = "False"
+                content_in = "False"
 
-        if isinstance(content, ModuleType):
-            content = json.dumps({"error": "Cannot decode object of type "+str(type(content))})
+        if isinstance(content_in, ModuleType):
+            content_in = json.dumps({"error": "Cannot decode object of type " + str(type(content_in))})
             content_type = Constant.APPLICATION_JSON
 
-        self.content = content
-        self.http_code = http_code
-        self.content_type = content_type
-        self.headers = headers
+        if content is not None and isinstance(content_in, str):
+            content_in = content + content_in
+
+        self.headers = headers_in if headers_in is not None else headers
+        self.content = content_in if content_in is not None else content
+        self.http_code = http_code_in if http_code_in is not None else http_code
+        self.content_type = content_type_in if content_type_in is not None else content_type
+        headers = self.headers
+        http_code = self.http_code
+        content_type = self.content_type
+        content = self.content
 
     @staticmethod
     def redirect(redirect_url):
@@ -63,16 +87,24 @@ class Response:
         :param redirect_url:
         :return:
         """
+        global headers
+        global content
+        global http_code
+        global content_type
         headers = {}
         http_code = Constant.HTTP_REDIRECT
         headers["Location"] = redirect_url
-        return Response("", http_code=http_code, headers=headers)
+        content = ""
+        content_type = Constant.TEXT_HTML
+        return Response("", http_code, content_type, headers)
 
-    def add_header(self, key, value):
+    @staticmethod
+    def add_header(key, value):
         """
         Adds a header for the response
         :param key:
         :param value:
         :return:
         """
-        self.headers[key] = value
+        global headers
+        headers[key] = value

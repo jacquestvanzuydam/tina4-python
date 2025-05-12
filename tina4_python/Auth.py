@@ -6,14 +6,23 @@
 # flake8: noqa: E501
 import datetime
 import os
-
 import jwt
+import bcrypt
+from json import JSONEncoder
 from cryptography import x509
 from cryptography.x509 import NameOID
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
-import bcrypt
+
+
+class AuthJSONSerializer(JSONEncoder):
+    def default(self, o):
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        else:
+            raise TypeError(f'Object of type {o.__class__.__name__} '
+                            f'is not JSON serializable')
 
 
 class Auth:
@@ -127,16 +136,22 @@ class Auth:
             with open(self.self_signed, "wb") as f:
                 f.write(cert.public_bytes(serialization.Encoding.PEM))
 
-    def get_token(self, payload_data):
+    def get_token(self, payload_data, expiry_minutes=0):
         private_key = self.load_private_key()
         now = datetime.datetime.now()
-        token_limit_minutes = int(os.environ.get("TINA4_TOKEN_LIMIT", 2))
-        expiry_time = now + datetime.timedelta(minutes=token_limit_minutes)
-        payload_data["expires"] = expiry_time.isoformat()
+
+        if "expires" not in payload_data:
+            token_limit_minutes = int(os.environ.get("TINA4_TOKEN_LIMIT", 2))
+            if expiry_minutes != 0:
+                token_limit_minutes  = expiry_minutes
+            expiry_time = now + datetime.timedelta(minutes=token_limit_minutes)
+            payload_data["expires"] = expiry_time.isoformat()
+
         token = jwt.encode(
             payload=payload_data,
             key=private_key,
-            algorithm='RS256'
+            algorithm='RS256',
+            json_encoder=AuthJSONSerializer
         )
 
         return token
